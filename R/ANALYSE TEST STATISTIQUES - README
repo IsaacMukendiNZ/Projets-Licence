@@ -1,0 +1,180 @@
+# Analyse d'Impact Sanitaire — Chaleur & Périnatalité · CHU Amiens (2016–2024)
+
+> **Projet de stage** — Laboratoire PériTox (INERIS × UPJV)  
+> Encadrement : Dr Estelle Durand, spécialiste en thermorégulation  
+> Thématique : *Protection de la femme enceinte et du fœtus face aux vagues de chaleur estivales liées au changement climatique*
+
+---
+
+## Description
+
+Ce script R modélise l'impact des vagues de chaleur estivales sur la **mortinatalité** et les **naissances prématurées** au CHU d'Amiens sur la période 2016–2024. Il s'agit d'un outil de **test de sensibilité statistique** développé dans le cadre d'un stage de recherche au laboratoire PériTox, unité mixte INERIS–Université de Picardie Jules Verne.
+
+L'objectif principal est de tester la robustesse des principaux tests statistiques épidémiologiques (GLM Quasi-Poisson, régression de Cox) face à des **événements rares** — les pics de mortinatalité et de prématurité lors des vagues de chaleur — sur une population de taille modérée.
+
+---
+
+## Structure du projet
+
+```
+projet-amiens/
+│
+├── analyse_amiens_v6.R        ← Script principal
+├── base_journaliere_AMIENS.xlsx  ← Base générée automatiquement à l'exécution
+└── README.md
+```
+
+---
+
+## 📊 Données utilisées
+
+| Source | Description | Période |
+|--------|-------------|---------|
+| **CHU d'Amiens** (ATIH / ARS HdF) | Naissances vivantes et morts-nés par type d'accouchement et âge gestationnel | 2016–2024 |
+| **Météo-France — station 80021001** AMIENS CITÉ ADM | Températures maximales mensuelles (TX) | 1901–1949 |
+| **Météo-France — station 80379002** AMIENS-GLISY | Humidité relative mensuelle (RH) | 1987–2024 |
+| **INSEE France** | Profil saisonnier des naissances (pondération mensuelle) | Référence nationale |
+
+> Les données du CHU d'Amiens sont **anonymisées** et ne sont pas incluses dans ce dépôt. Le script demande à l'utilisateur de sélectionner le fichier Excel à l'exécution.
+
+---
+
+## Paramètres climatiques réels intégrés
+
+Les températures simulées sont basées sur les **données historiques réelles de la station Météo-France d'Amiens** :
+
+| Mois | TX moyenne (°C) | SD calibré (°C) |
+|------|----------------|-----------------|
+| Janvier | 6.47 | 1.50 |
+| Avril | 14.95 | 2.69 |
+| Juin | 22.31 | 5.59 |
+| Juillet | 24.31 | 4.37 |
+| Août | 24.05 | 4.53 |
+| Décembre | 6.42 | 1.50 |
+
+**Seuils de vagues de chaleur** (percentiles TX estivaux, juin–août, Amiens historique) :
+
+| Percentile | Seuil TX (°C) |
+|------------|--------------|
+| P90 | 29.5 |
+| P95 | 31.5 ← *retenu* |
+| P98 | 33.0 |
+| P99 | 34.5 |
+
+Les vagues sont générées aléatoirement **1 à 2 fois par an** en période estivale (juin–août), avec des températures plafonnées entre **P95 (31.5°C) et P99 (34.5°C)**, et une durée variable de **4 à 14 jours**.
+
+---
+
+## Installation
+
+### Prérequis
+- R ≥ 4.0
+- RStudio (recommandé)
+
+### Packages requis
+
+```r
+install.packages(c("readxl", "writexl", "ggplot2", "gridExtra", 
+                   "dplyr", "tidyr", "survival"))
+```
+
+---
+
+## Utilisation
+
+```r
+source("analyse_amiens_v6.R")
+```
+
+Le script s'exécute de manière interactive en **9 étapes** :
+
+| Étape | Description |
+|-------|-------------|
+| 1 | Import du fichier Excel CHU (sélection manuelle) |
+| 2 | Extraction et agrégation des effectifs annuels |
+| 3 | Régressions linéaires + graphiques de tendance |
+| 4 | Génération de la base journalière stochastique |
+| 5 | Histogrammes des effectifs (naissances / mortinatalité) |
+| 6 | Graphique des vagues de chaleur simulées |
+| 7 | GLM Quasi-Poisson avec sélection du lag optimal (1–7j) |
+| 8 | Régression de Cox (risque journalier) |
+| 9 | Test de robustesse stochastique (saisie utilisateur) |
+
+À l'étape 9, le script demande :
+```
+Combien d'événements MORTINATALITÉ retirer dans les vagues ?
+Combien d'événements PRÉMATURITÉ retirer dans les vagues ?
+```
+Les résultats GLM et Cox sont recalculés après retrait pour évaluer la stabilité du modèle.
+
+---
+
+## Sorties produites
+
+**Console R :**
+```
+  Naissances     | Pente : -21.80/an | R² : 0.254
+  Mortinatalie   | Pente : +0.30/an  | R² : 0.012
+  Prématurés     | Pente : -2.00/an  | R² : 0.030
+
+  [LAG OPTIMAL] 4j
+
+  Mortinatalie   | IRR: 0.672 [IC95%: 0.399–1.134] | P: 0.137
+  Prématurité    | IRR: 0.904 [IC95%: 0.749–1.090] | P: 0.290
+
+  Mortinatalie   | HR: x.xxx [IC95%: x.xxx–x.xxx]  | P: x.xxx
+  Prématurité    | HR: x.xxx [IC95%: x.xxx–x.xxx]  | P: x.xxx
+```
+
+**Fichiers générés :**
+- `base_journaliere_AMIENS.xlsx` — base journalière complète avec TM, vagues et effectifs distribués
+
+**Graphiques (3 fenêtres) :**
+- Tendances linéaires mortinatalité et prématurité
+- Histogrammes cumulés naissances/prématurés + mortinatalité
+- Courbe des températures et vagues de chaleur simulées (2016–2024)
+
+---
+
+## Méthodes statistiques
+
+### GLM Quasi-Poisson
+Modélise le **nombre d'événements** (mortinatalité, prématurité) en fonction de l'exposition aux vagues de chaleur. Adapté aux données de comptage sur petites populations avec surdispersion. Le lag optimal (1–7 jours) est sélectionné par minimisation de la déviance.
+
+**Indicateur produit :** IRR (Incidence Rate Ratio) avec IC 95%
+
+### Régression de Cox
+Modélise le **risque journalier de survenue** d'un événement en fonction du temps (rang du jour dans l'année) et de l'exposition à la vague de chaleur. Inspirée de la méthodologie de Son et al. (2022) — *North Carolina preterm birth study*.
+
+**Indicateur produit :** HR (Hazard Ratio) avec IC 95%
+
+### Test de robustesse stochastique
+Retrait manuel d'événements pendant les périodes de vague pour tester la **stabilité des deux modèles** face à la rareté des événements. Permet d'identifier le seuil à partir duquel les résultats perdent leur significativité statistique.
+
+---
+
+## Références bibliographiques principales
+
+- Fouillet et al. (2006) — *Excess mortality related to the August 2003 heat wave in France*
+- Azhar et al. (2014) — *Heat-Related Mortality in India: Ahmedabad Heat Wave 2010*
+- Anderson & Bell (2012) — *Lights Out: Impact of the August 2003 Power Outage on Mortality*
+- Son et al. (2022) — *Exposure to heat during pregnancy and preterm birth in North Carolina*
+- Burkart et al. (2023) — *Increased late preterm birth risk and altered uterine blood flow upon exposure to heat stress*
+- Kim et al. (2011) — *The Impact of Heat Waves on Mortality in Seven Major Cities in Korea*
+- Della Vedova, C. (2019) — *Introduction à l'analyse de données avec le logiciel R*
+
+---
+
+## Auteur
+
+Stage réalisé au **Laboratoire PériTox** — Périnatalité et Risques Toxiques  
+Unité mixte INERIS × Université de Picardie Jules Verne (UPJV) — CHU Amiens  
+Directrice d'unité : Pr Véronique Bach  
+Encadrante : Dr Estelle Durand
+
+---
+
+## Licence
+
+Ce projet est partagé à des fins académiques et de recherche.  
+Les données du CHU d'Amiens sont confidentielles et ne sont pas incluses dans ce dépôt.
